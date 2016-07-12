@@ -1,7 +1,7 @@
 var url = require('url'),
     util = require('util'),
     amqp = require('amqp'),
-    redis = require('redis'),
+    Redis = require('ioredis'),
     events = require('events'),
     uuid = require('node-uuid');
 
@@ -45,26 +45,32 @@ function RedisBroker(broker_url) {
     var self = this;
     var purl = url.parse(broker_url);
     var database;
+
+    var opts = {
+        host: purl.hostname || 'localhost',
+        port: purl.port || 6379,
+    };
+
     if (purl.pathname) {
-      database = purl.pathname.slice(1);
+        opts.db = purl.pathname.slice(1);
     }
 
-    self.redis = redis.createClient(purl.port || 6379,
-                                    purl.hostname || 'localhost');
-    if (database) {
-        self.redis.select(database);
-    }
+    // if (database) {
+    //     self.redis.select(database);
+    // }
 
     if (purl.auth) {
         debug('Authenticating broker...');
-        self.redis.auth(purl.auth.split(':')[1]);
+        opts.password = (purl.auth.split(':')[1]);
         debug('Broker authenticated...');
     }
+
+    self.redis = new Redis(opts);
 
     self.end = function() {
       self.redis.end();
     };
-    
+
     self.disconnect = function() {
         self.redis.end();
     };
