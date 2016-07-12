@@ -18,6 +18,6 @@
   "engine": "node >= 0.8.2",
   "main": "celery.js",
   "scripts": {
-    "test": "./tests/runTests.sh"
+    "test": "./node_modules/.bin/mocha --recursive tests"
   }
 }
