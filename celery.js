@@ -149,19 +149,22 @@ function Client(conf) {
             defaultExchangeName: self.conf.DEFAULT_EXCHANGE
         });
     } else if (self.conf.backend_type === 'redis') {
-        var purl = url.parse(self.conf.RESULT_BACKEND),
-            database = purl.pathname.slice(1);
+        var purl = url.parse(self.conf.RESULT_BACKEND);
+        var database = purl.pathname ? purl.pathname.slice(1) : 0;
+
         debug('Connecting to backend...');
-        self.backend = redis.createClient(purl.port, purl.hostname);
-        if (database) {
-            self.backend.select(database);
+
+        var opts = {
+            host: purl.hostname || 'localhost',
+            port: purl.port || 6379,
+        };
+        if (purl.auth) {
+            debug('Authenticating broker...');
+            opts.password = (purl.auth.split(':')[1]);
+            debug('Broker authenticated...');
         }
 
-        if (purl.auth) {
-            debug('Authenticating backend...');
-            self.backend.auth(purl.auth.split(':')[1]);
-            debug('Backend authenticated...');
-        }
+        self.backend = new Redis(self.conf.RESULT_BACKEND);
 
         self.backend.on('connect', function() {
             debug('Backend connected...');
@@ -175,6 +178,31 @@ function Client(conf) {
 
         self.backend.on('error', function(err) {
             self.emit('error', err);
+        });
+
+        self.subscription = new Redis(self.conf.RESULT_BACKEND);
+        self.subscription.on('connect', function() {
+            self.subscription.on('pmessage', function(channel, message, eventType) {
+                console.log('got a "%s" event on channel [%s]:  %s | %s', eventType, channel, message);
+
+                if (eventType !== 'set') {
+                    console.log("not a set - returning.");
+                    return;
+                }
+
+                var taskId = message.split(':')[1];
+                console.log('emitting on taskid: %s on %s', taskId, self);
+                self.emit('taskFinished', {
+                    taskId: taskId
+                });
+            });
+
+            self.subscription.psubscribe('__keyspace@' + database + '__:*', function(err, count) {
+                if (err) {
+                    console.error('error subscribing to set events: ', err);
+                }
+                debug('subscribed to set events', count);
+            });
         });
     } else {
         self.backend_connected = true;
@@ -251,6 +279,8 @@ function Task(client, name, options, exchange) {
     self.publish = function (args, kwargs, options, callback) {
         var id = options.id || uuid.v4();
 
+        var result = new Result(id, self.client);
+
         queue = options.queue || self.options.queue || queue || self.client.conf.DEFAULT_QUEUE;
         var msg = createMessage(self.name, args, kwargs, options, id);
         var pubOptions = {
@@ -264,7 +294,7 @@ function Task(client, name, options, exchange) {
             self.client.broker.publish(queue, msg, pubOptions, callback);
         }
 
-        return new Result(id, self.client);
+        return result;
     };
 }
 
@@ -318,6 +348,22 @@ function Result(taskid, client) {
                     self.emit(message.status.toLowerCase(), message);
                 }).addCallback(function(ok) { ctag = ok.consumerTag; });
             });
+    }
+    else if (self.client.conf.backend_type === 'redis') {
+        console.log('registering on with client');
+        self.client.on('taskFinished', function(task) {
+            console.log('taskFinished - Fetching result...');
+            var resultPromise = self.client.backend.get(task.taskId)
+                .then(function(value) {
+                    value = JSON.parse(value);
+                    self.result = value;
+                    self.emit('ready', value);
+                    self.emit(value.status.toLowerCase(), value);
+                })
+                .catch(function(err) {
+                    console.error('error while try to get task results: ', err)
+                });
+        });
     }
 }
 
