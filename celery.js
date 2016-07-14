@@ -361,7 +361,7 @@ function Result(taskid, client) {
                     self.emit(value.status.toLowerCase(), value);
                 })
                 .catch(function(err) {
-                    console.error('error while try to get task results: ', err)
+                    console.error('error while trying to get task results: ', err)
                 });
         });
     }

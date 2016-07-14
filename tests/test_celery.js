@@ -2,11 +2,11 @@ var celery = require('../celery'),
     assert = require('assert');
 
 var conf = {
-    CELERY_BROKER_URL: 'amqp://',
+    CELERY_BROKER_URL: 'amqp://guest:guest@rabbit:5672//',
     CELERY_RESULT_BACKEND: 'amqp'
 };
 var conf_redis = {
-    CELERY_BROKER_URL: 'redis://'
+    CELERY_BROKER_URL: 'redis://redis:6379'
 };
 
 describe('celery functional tests', function() {

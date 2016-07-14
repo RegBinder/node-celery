@@ -3,11 +3,12 @@ import logging
 from celery import Celery
 
 
-celery = Celery('tasks', broker='amqp://')
+celery = Celery('tasks', broker='amqp://guest:guest@rabbit:5672//')
 
 celery.conf.update(
-        CELERY_RESULT_BACKEND = "amqp",
+        CELERY_RESULT_BACKEND = 'amqp',
         CELERY_RESULT_SERIALIZER='json',
+        CELERY_TASK_SERIALIZER='json',
         )
 
 
@@ -43,5 +44,5 @@ def send_email(to='me@example.com', title='hi'):
     logging.info("Sending email to '%s' with title '%s'" % (to, title))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     celery.start()
