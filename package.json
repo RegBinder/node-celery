@@ -1,5 +1,5 @@
 {
-  "name": "node-celery",
+  "name": "@complion/node-celery",
   "version": "0.2.6",
   "description": "Celery client for Node",
   "author": "Mher Movsisyan <mher.movsisyan@gmail.com>",
@@ -18,6 +18,6 @@
   "engine": "node >= 0.8.2",
   "main": "celery.js",
   "scripts": {
-    "test": "./node_modules/.bin/mocha --recursive tests"
+    "test": "echo 'Starting...'; sleep 10; ./node_modules/.bin/mocha --recursive tests"
   }
 }

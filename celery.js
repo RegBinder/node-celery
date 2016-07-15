@@ -6,6 +6,7 @@ var url = require('url'),
     uuid = require('node-uuid');
 
 var createMessage = require('./protocol').createMessage;
+var _celeryTaskPrefix = 'celery-task-meta-';
 
 
 debug = process.env.NODE_CELERY_DEBUG === '1' ? util.debug : function() {};
@@ -68,11 +69,11 @@ function RedisBroker(broker_url) {
     self.redis = new Redis(opts);
 
     self.end = function() {
-      self.redis.end();
+      self.redis.quit();
     };
 
     self.disconnect = function() {
-        self.redis.end();
+        self.redis.quit();
     };
 
     self.redis.on('connect', function() {
@@ -180,30 +181,42 @@ function Client(conf) {
             self.emit('error', err);
         });
 
-        self.subscription = new Redis(self.conf.RESULT_BACKEND);
-        self.subscription.on('connect', function() {
-            self.subscription.on('pmessage', function(channel, message, eventType) {
-                console.log('got a "%s" event on channel [%s]:  %s | %s', eventType, channel, message);
+        var redis = new Redis(self.conf.RESULT_BACKEND)
+        redis.on('connect', function() {
+            // IMPORTANT: enable keyspace events so we can be notified when our keys change!
+            redis.config('set', 'notify-keyspace-events', 'KEA', function() {
+                redis.quit();
+                self.subscription = new Redis(self.conf.RESULT_BACKEND);
 
-                if (eventType !== 'set') {
-                    console.log("not a set - returning.");
-                    return;
-                }
+                self.subscription.on('connect', function() {
 
-                var taskId = message.split(':')[1];
-                console.log('emitting on taskid: %s on %s', taskId, self);
-                self.emit('taskFinished', {
-                    taskId: taskId
+                    self.subscription.on('pmessage', function(pattern, channel, message, result) {
+                        console.log('got a "%s" event on channel [%s]:  %s | %s ||| %s', message, channel, message, result);
+
+                        if (message !== 'set') {
+                            console.log("not a set - returning.");
+                            return;
+                        }
+
+                        var taskId = channel.split(':')[1];
+                        console.log('emitting on taskid: %s on %s', taskId, self);
+                        self.emit('taskFinished', {
+                            taskId: taskId
+                        });
+                    });
+
+                    var subId = '__keyspace@' + database + '__:' + _celeryTaskPrefix + '*';
+                    console.log('subscribing to : ', subId);
+                    self.subscription.psubscribe(subId, function(err, count) {
+                        if (err) {
+                            console.error('error subscribing to keyspace events: ', err);
+                        }
+                        debug('subscribed to set events', count);
+                    });
                 });
             });
-
-            self.subscription.psubscribe('__keyspace@' + database + '__:*', function(err, count) {
-                if (err) {
-                    console.error('error subscribing to set events: ', err);
-                }
-                debug('subscribed to set events', count);
-            });
         });
+
     } else {
         self.backend_connected = true;
     }
@@ -235,7 +248,7 @@ Client.prototype.createTask = function(name, options, exchange) {
 
 Client.prototype.end = function() {
     this.broker.disconnect();
-    if (this.backend && this.broker !== this.backend) {
+    if (this.backend && (this.broker !== this.backend)) {
         this.backend.quit();
     }
 };
@@ -321,6 +334,7 @@ function Result(taskid, client) {
     self.client = client;
     self.result = null;
 
+    console.log('creating result with backend_type: ', self.client.conf.backend_type);
     if (self.client.conf.backend_type === 'amqp') {
         debug('Subscribing to result queue...');
         self.client.backend.queue(
@@ -372,7 +386,7 @@ util.inherits(Result, events.EventEmitter);
 Result.prototype.get = function(callback) {
     var self = this;
     if (callback && self.result === null) {
-        self.client.backend.get('celery-task-meta-' + self.taskid, function(err, reply) {
+        self.client.backend.get(_celeryTaskPrefix + self.taskid, function(err, reply) {
             self.result = JSON.parse(reply);
             callback(self.result);
         });

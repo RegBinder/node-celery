@@ -1,15 +1,13 @@
 import logging
+import os
 
 from celery import Celery
 
 
-celery = Celery('tasks', broker='amqp://guest:guest@rabbit:5672//')
+celery = Celery('tasks', broker=os.environ['CELERY_BROKER_URL'])
 
-celery.conf.update(
-        CELERY_RESULT_BACKEND = 'amqp',
-        CELERY_RESULT_SERIALIZER='json',
-        CELERY_TASK_SERIALIZER='json',
-        )
+celery_opts = {k: v for (k, v) in os.environ.items() if k.startswith('CELERY_')}
+celery.conf.update(**celery_opts)
 
 
 @celery.task
