@@ -191,22 +191,19 @@ function Client(conf) {
                 self.subscription.on('connect', function() {
 
                     self.subscription.on('pmessage', function(pattern, channel, message, result) {
-                        console.log('got a "%s" event on channel [%s]:  %s | %s ||| %s', message, channel, message, result);
+                        debug('got a "%s" event on channel [%s]:  %s | %s ||| %s', message, channel, message, result);
 
                         if (message !== 'set') {
-                            console.log("not a set - returning.");
                             return;
                         }
 
                         var taskId = channel.split(':')[1];
-                        console.log('emitting on taskid: %s on %s', taskId, self);
                         self.emit('taskFinished', {
                             taskId: taskId
                         });
                     });
 
                     var subId = '__keyspace@' + database + '__:' + _celeryTaskPrefix + '*';
-                    console.log('subscribing to : ', subId);
                     self.subscription.psubscribe(subId, function(err, count) {
                         if (err) {
                             console.error('error subscribing to keyspace events: ', err);
@@ -334,7 +331,6 @@ function Result(taskid, client) {
     self.client = client;
     self.result = null;
 
-    console.log('creating result with backend_type: ', self.client.conf.backend_type);
     if (self.client.conf.backend_type === 'amqp') {
         debug('Subscribing to result queue...');
         self.client.backend.queue(
@@ -364,9 +360,7 @@ function Result(taskid, client) {
             });
     }
     else if (self.client.conf.backend_type === 'redis') {
-        console.log('registering on with client');
         self.client.on('taskFinished', function(task) {
-            console.log('taskFinished - Fetching result...');
             var resultPromise = self.client.backend.get(task.taskId)
                 .then(function(value) {
                     value = JSON.parse(value);
