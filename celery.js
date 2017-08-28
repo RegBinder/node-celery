@@ -134,22 +134,15 @@ function Client(conf) {
       self.broker = new RedisBroker(self.conf.BROKER_URL);
     }
 
-    if (self.conf.backend_type === self.conf.broker_type) {
-
-        if (self.conf.backend_type === 'redis') {
-          self.backend = self.broker.redis;
-        } else {
-          self.backend = self.broker;
-        }
-        self.backend_connected = true;
-    } else if (self.conf.backend_type === 'amqp') {
+    if (self.conf.backend_type === 'amqp') {
         self.backend = amqp.createConnection({
             url: self.conf.BROKER_URL,
             heartbeat: 580
         }, {
             defaultExchangeName: self.conf.DEFAULT_EXCHANGE
         });
-    } else if (self.conf.backend_type === 'redis') {
+    }
+    else if (self.conf.backend_type === 'redis') {
         var purl = url.parse(self.conf.RESULT_BACKEND);
         var database = purl.pathname ? purl.pathname.slice(1) : 0;
 
